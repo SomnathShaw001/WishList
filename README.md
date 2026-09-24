@@ -67,20 +67,7 @@ public/         # Static assets
 
 State lives in `page.tsx`: `tasks`, `activeList`, `view`, `search`, `priorityFilter`, `statusFilter`, `selectedTask`, `pomodoro`. Persisted to `localStorage`.
 
-## Deploy on Vercel
 
-1-click (recommended):
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https://github.com/SomnathShaw001/WishList)
-
-Manual:
-1. Push to GitHub (already done: `main`)
-2. Go to `vercel.com → Add New → Project → Import SomnathShaw001/WishList`
-3. Framework: Next.js, Build: `npm run build`, Output: `.next`
-4. Deploy — no env vars required
-
-```bash
-npx vercel --prod
 ```
 
 ## Roadmap
