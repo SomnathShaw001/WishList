@@ -2,7 +2,7 @@
 
 A rich-featured, high-response Todo / Wishlist app built with Next.js. List, Kanban Board, and Calendar views. Offline-first, instant interactions, dark mode, and recruiter-ready polish.
 
-Live: `https://wishlist-somnath.vercel.app` _(after Vercel import below)_
+Live: `https://projectgrow-ten.vercel.app`
 Repo: `https://github.com/SomnathShaw001/WishList`
 
 ![Next.js](https://img.shields.io/badge/Next.js-16-black) ![React](https://img.shields.io/badge/React-19-61DAFB) ![Tailwind](https://img.shields.io/badge/Tailwind-4-06B6D4) ![Framer Motion](https://img.shields.io/badge/Framer_Motion-13-ff0080) ![Vercel](https://img.shields.io/badge/Deploy-Vercel-black)
