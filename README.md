@@ -93,5 +93,5 @@ npx vercel --prod
 
 ## Author
 
-Somnath Shaw — CSE (IoT) • SDE
+Somnath Shaw  
 GitHub: [@SomnathShaw001](https://github.com/SomnathShaw001)
