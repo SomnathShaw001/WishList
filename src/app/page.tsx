@@ -56,6 +56,10 @@ const SEED: Task[] = [
   },
 ];
 
+function toISO(d: Date){
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,"0")}-${String(d.getDate()).padStart(2,"0")}`;
+}
+
 export default function WishListApp() {
   const [tasks, setTasks] = useState<Task[]>(SEED);
   const [lists] = useState<List[]>(LISTS);
@@ -75,6 +79,9 @@ export default function WishListApp() {
   const [showCmd, setShowCmd] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
   const [pomodoro, setPomodoro] = useState<{id:string, sec:number, running:boolean}|null>(null);
+  const [calCursor, setCalCursor] = useState(()=>{ const d=new Date(); return new Date(d.getFullYear(), d.getMonth(), 1); });
+  const [selectedDate, setSelectedDate] = useState(()=> toISO(new Date()));
+  const [calInput, setCalInput] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -132,6 +139,51 @@ export default function WishListApp() {
       done: filtered.filter(t=>t.status==="done"),
     };
   },[filtered]);
+
+  const todayISO = toISO(new Date());
+  const tasksByDate = useMemo(()=>{
+    const m = new Map<string, Task[]>();
+    for(const t of tasks){
+      if(!t.dueDate) continue;
+      const a = m.get(t.dueDate);
+      if(a) a.push(t); else m.set(t.dueDate, [t]);
+    }
+    return m;
+  },[tasks]);
+  const calCells = useMemo(()=>{
+    const y = calCursor.getFullYear(), mo = calCursor.getMonth();
+    const first = new Date(y, mo, 1).getDay();
+    const days = new Date(y, mo+1, 0).getDate();
+    const prevDays = new Date(y, mo, 0).getDate();
+    const cells: { iso: string; day: number; inMonth: boolean }[] = [];
+    for(let i=first-1; i>=0; i--) cells.push({ iso: toISO(new Date(y, mo-1, prevDays-i)), day: prevDays-i, inMonth: false });
+    for(let d=1; d<=days; d++) cells.push({ iso: toISO(new Date(y, mo, d)), day: d, inMonth: true });
+    let n=1;
+    while(cells.length%7!==0){ cells.push({ iso: toISO(new Date(y, mo+1, n)), day: n, inMonth: false }); n++; }
+    return cells;
+  },[calCursor]);
+  const monthKey = `${calCursor.getFullYear()}-${String(calCursor.getMonth()+1).padStart(2,"0")}`;
+  const monthLabel = calCursor.toLocaleDateString("en-US",{month:"long", year:"numeric"});
+  const monthTotal = tasks.filter(t=> t.dueDate?.startsWith(monthKey)).length;
+  const selectedDayTasks = useMemo(()=>{
+    const a = [...(tasksByDate.get(selectedDate) ?? [])];
+    a.sort((x,y)=> (x.status==="done"?1:0)-(y.status==="done"?1:0));
+    return a;
+  },[tasksByDate, selectedDate]);
+  const unscheduled = useMemo(()=> tasks.filter(t=> !t.dueDate),[tasks]);
+  const overdue = useMemo(()=> tasks.filter(t=> t.dueDate && t.dueDate<todayISO && t.status!=="done").sort((a,b)=> (a.dueDate||"").localeCompare(b.dueDate||"")),[tasks, todayISO]);
+  const selectedLabel = new Date(selectedDate+"T12:00:00").toLocaleDateString("en-US",{weekday:"long", month:"short", day:"numeric"});
+
+  function addTaskForDate(){
+    if(!calInput.trim()) return;
+    const t: Task = {
+      id: Date.now().toString(), title: calInput.trim(), description:"", status:"todo", priority:newPriority,
+      dueDate:selectedDate, tags:[], subtasks:[],
+      listId: (activeList!=="all"&&activeList!=="today")?activeList:"wishlist",
+      createdAt: new Date().toISOString(), completedAt:null
+    };
+    setTasks(prev=>[t,...prev]); setCalInput(""); showToast("Scheduled for "+selectedDate);
+  }
 
   function addTask(){
     if(!newTitle.trim()) return;
@@ -408,27 +460,102 @@ export default function WishListApp() {
           )}
 
           {view==="calendar" && (
-            <div className="rounded-[24px] bg-zinc-950 border border-zinc-800 p-4 md:p-6">
-              <h3 className="font-semibold mb-4 text-white">Calendar — next 14 days</h3>
-              <div className="grid grid-cols-2 md:grid-cols-7 gap-3">
-                {Array.from({length:14}).map((_,i)=>{
-                  const d = new Date(); d.setDate(d.getDate()+i);
-                  const iso = d.toISOString().slice(0,10);
-                  const dayTasks = tasks.filter(t=> t.dueDate===iso);
-                  const isToday = i===0;
+            <div className="flex flex-col gap-4">
+            <div className="rounded-[24px] bg-zinc-950 border border-zinc-800 p-3 sm:p-4 md:p-6">
+              <div className="flex flex-wrap items-center gap-2 mb-3 sm:mb-4">
+                <h3 className="font-semibold text-white text-base sm:text-lg">{monthLabel}</h3>
+                <span className="text-xs px-2 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">{monthTotal} scheduled</span>
+                <div className="ml-auto flex items-center gap-1.5">
+                  <button onClick={()=> setCalCursor(c=> new Date(c.getFullYear(), c.getMonth()-1, 1))} aria-label="Previous month" className="w-8 h-8 grid place-items-center rounded-full border border-zinc-800 text-zinc-300 hover:bg-zinc-900">‹</button>
+                  <button onClick={()=> { const n=new Date(); setCalCursor(new Date(n.getFullYear(), n.getMonth(), 1)); setSelectedDate(toISO(n)); }} className="px-3 h-8 rounded-full bg-white text-black text-xs font-bold hover:bg-zinc-200">Today</button>
+                  <button onClick={()=> setCalCursor(c=> new Date(c.getFullYear(), c.getMonth()+1, 1))} aria-label="Next month" className="w-8 h-8 grid place-items-center rounded-full border border-zinc-800 text-zinc-300 hover:bg-zinc-900">›</button>
+                </div>
+              </div>
+              <div className="grid grid-cols-7 gap-1 sm:gap-2 mb-1 sm:mb-2">
+                {["Sun","Mon","Tue","Wed","Thu","Fri","Sat"].map(d=> <p key={d} className="text-center text-[10px] sm:text-xs font-bold text-zinc-600 uppercase truncate">{d}</p>)}
+              </div>
+              <div className="grid grid-cols-7 gap-1 sm:gap-2">
+                {calCells.map(cell=>{
+                  const dayTasks = tasksByDate.get(cell.iso) ?? [];
+                  const isToday = cell.iso===todayISO;
+                  const isSel = cell.iso===selectedDate;
                   return (
-                    <div key={iso} className={`rounded-2xl border p-3 min-h-[120px] ${isToday?"bg-white text-black border-white":"bg-black border-zinc-800"}`}>
-                      <p className={`text-xs font-bold ${isToday?"text-black/60":"text-zinc-500"}`}>{d.toLocaleDateString("en-US",{weekday:"short"})}</p>
-                      <p className="text-sm font-bold">{d.toLocaleDateString("en-US",{day:"2-digit", month:"short"})}</p>
-                      <div className="mt-2 space-y-1">
-                        {dayTasks.slice(0,3).map(t=> <div key={t.id} className={`text-xs px-2 py-1 rounded-full truncate ${isToday?"bg-black/10":"bg-zinc-900 border border-zinc-800 text-zinc-300"}`}>{t.title}</div>)}
-                        {dayTasks.length>3 && <span className="text-xs opacity-70">+{dayTasks.length-3} more</span>}
-                        {dayTasks.length===0 && <span className={`text-xs ${isToday?"text-black/50":"text-zinc-600"}`}>— no tasks</span>}
+                    <div key={cell.iso} role="button" tabIndex={0}
+                      onClick={()=> setSelectedDate(cell.iso)}
+                      onKeyDown={e=>{ if(e.key==="Enter"||e.key===" "){ e.preventDefault(); setSelectedDate(cell.iso); } }}
+                      onDragOver={e=> e.preventDefault()}
+                      onDrop={e=>{ const id=e.dataTransfer.getData("text/plain"); if(id){ updateTask(id,{dueDate:cell.iso}); setSelectedDate(cell.iso); showToast("Scheduled for "+cell.iso); } }}
+                      className={`rounded-xl sm:rounded-2xl border p-1 sm:p-2 min-h-[54px] sm:min-h-[104px] cursor-pointer transition outline-none focus:border-zinc-400 ${isSel?"bg-white text-black border-white":cell.inMonth?"bg-black border-zinc-800 hover:border-zinc-500":"bg-black border-zinc-900 opacity-40"} ${isToday&&!isSel?"!border-white":""}`}>
+                      <span className={`inline-grid place-items-center w-5 h-5 sm:w-6 sm:h-6 rounded-full text-[11px] sm:text-xs font-bold ${isSel?"bg-black text-white":isToday?"bg-white text-black":cell.inMonth?"text-zinc-200":"text-zinc-600"}`}>{cell.day}</span>
+                      <div className="hidden sm:block mt-1.5 space-y-1">
+                        {dayTasks.slice(0,3).map(t=>(
+                          <div key={t.id} draggable onDragStart={e=>{ e.stopPropagation(); e.dataTransfer.setData("text/plain", t.id); }} onClick={e=>{ e.stopPropagation(); setSelectedTask(t); }}
+                            className={`text-[11px] px-2 py-1 rounded-full truncate border cursor-grab active:cursor-grabbing ${isSel?"bg-black/10 border-black/15 text-black":t.status==="done"?"bg-zinc-900 border-zinc-800 text-zinc-600 line-through":"bg-zinc-900 border-zinc-800 text-zinc-300 hover:border-zinc-600"}`}>
+                            {t.title}
+                          </div>
+                        ))}
+                        {dayTasks.length>3 && <span className={`text-[10px] ${isSel?"text-black/60":"text-zinc-500"}`}>+{dayTasks.length-3} more</span>}
+                      </div>
+                      <div className="sm:hidden flex justify-center items-center gap-[3px] mt-1 h-2">
+                        {dayTasks.slice(0,3).map(t=> <span key={t.id} className={`w-1 h-1 rounded-full ${isSel?"bg-black":"bg-white"}`}/>)}
+                        {dayTasks.length===0 && <span className="w-1 h-1"/>}
                       </div>
                     </div>
                   )
                 })}
               </div>
+              <p className="mt-3 text-[11px] sm:text-xs text-zinc-600">Tap a day to view • Drag cards between days to reschedule • Tap a card to open</p>
+            </div>
+
+            <div className="rounded-[24px] bg-zinc-950 border border-zinc-800 p-4 md:p-5">
+              <div className="flex flex-wrap items-center gap-2">
+                <h4 className="font-semibold text-white">{selectedLabel}{selectedDate===todayISO?" • Today":""}</h4>
+                <span className="text-xs px-2 py-1 rounded-full bg-zinc-900 border border-zinc-800 text-zinc-400">{selectedDayTasks.length} tasks</span>
+              </div>
+              <div className="mt-3 flex gap-2">
+                <input value={calInput} onChange={e=> setCalInput(e.target.value)} onKeyDown={e=> e.key==="Enter" && addTaskForDate()} placeholder={`Add task for ${selectedDate} — Enter`} className="flex-1 min-w-0 px-3 h-10 rounded-xl border border-zinc-800 bg-black text-sm text-zinc-100 placeholder:text-zinc-600 outline-none focus:border-zinc-500"/>
+                <button onClick={addTaskForDate} className="shrink-0 px-4 h-10 rounded-xl bg-white text-black text-sm font-bold hover:bg-zinc-200">Add</button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {selectedDayTasks.length===0 && <p className="text-sm text-zinc-600">Nothing scheduled — add above, drag a card here, or tap an unscheduled task below.</p>}
+                {selectedDayTasks.map(t=>(
+                  <div key={t.id} onDragOver={e=> e.preventDefault()} className={`flex items-center gap-2 p-2.5 rounded-xl border ${t.status==="done"?"border-zinc-900 opacity-50":"border-zinc-800 bg-black"}`}>
+                    <button onClick={()=> toggleStatus(t.id)} className={`w-6 h-6 rounded-full border-2 grid place-items-center shrink-0 text-xs ${t.status==="done"?"bg-white border-white text-black":"border-zinc-700 hover:border-white text-white"}`}>{t.status==="done"?"✓":""}</button>
+                    <button onClick={()=> setSelectedTask(t)} className={`flex-1 min-w-0 text-left text-sm font-medium truncate ${t.status==="done"?"line-through text-zinc-600":"text-zinc-100"}`}>{t.title}</button>
+                    <span className={`w-2 h-2 rounded-full shrink-0 ${PRIORITY_CFG[t.priority].dot}`}/>
+                    {t.dueDate!==selectedDate && <span className="text-[11px] text-zinc-600 font-mono shrink-0">{t.dueDate}</span>}
+                    <button onClick={()=>{ updateTask(t.id,{dueDate:null}); showToast("Unscheduled"); }} title="Remove date" className="shrink-0 text-[11px] px-2 py-1 rounded-full border border-zinc-800 text-zinc-500 hover:text-zinc-200">Clear</button>
+                  </div>
+                ))}
+              </div>
+              {selectedDate===todayISO && overdue.length>0 && (
+                <div className="mt-4 pt-4 border-t border-zinc-800">
+                  <p className="text-xs font-bold tracking-wide text-zinc-400 uppercase">Overdue • {overdue.length}</p>
+                  <div className="mt-2 space-y-2">
+                    {overdue.slice(0,5).map(t=>(
+                      <div key={t.id} className="flex items-center gap-2 p-2.5 rounded-xl border border-zinc-800 bg-black">
+                        <span className="flex-1 min-w-0 text-sm text-zinc-300 truncate">{t.title}</span>
+                        <span className="text-[11px] font-mono text-zinc-600 shrink-0">{t.dueDate}</span>
+                        <button onClick={()=>{ updateTask(t.id,{dueDate:selectedDate}); showToast("Moved to today"); }} className="shrink-0 text-[11px] px-2 py-1 rounded-full bg-white text-black font-bold">Move here</button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {unscheduled.length>0 && (
+                <div className="mt-4 pt-4 border-t border-zinc-800">
+                  <p className="text-xs font-bold tracking-wide text-zinc-400 uppercase">Unscheduled • {unscheduled.length} — tap to assign to {selectedDate}, or drag onto a day</p>
+                  <div className="mt-2 flex flex-wrap gap-1.5">
+                    {unscheduled.slice(0,12).map(t=>(
+                      <button key={t.id} draggable onDragStart={e=> e.dataTransfer.setData("text/plain", t.id)}
+                        onClick={()=>{ updateTask(t.id,{dueDate:selectedDate}); showToast("Scheduled for "+selectedDate); }}
+                        className="max-w-full truncate text-xs px-2.5 py-1.5 rounded-full border border-zinc-800 bg-black text-zinc-300 hover:border-zinc-500 cursor-grab">＋ {t.title}</button>
+                    ))}
+                  </div>
+                  {unscheduled.length>12 && <p className="mt-1.5 text-[11px] text-zinc-600">+{unscheduled.length-12} more in List view</p>}
+                </div>
+              )}
+            </div>
             </div>
           )}
 
